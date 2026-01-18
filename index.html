@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Logistics Intelligence PRO - Elite V19</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Inter:wght@300;400;600&display=swap');
+        :root { --bg-dark: #020617; --card-bg: #0f172a; --neon-purple: #a855f7; --neon-blue: #38bdf8; --white-glow: #ffffff; }
+        
+        body { background-color: var(--bg-dark); color: var(--white-glow); font-family: 'Inter', sans-serif; margin: 0; padding: 0; }
+        .font-header { font-family: 'Orbitron', sans-serif; }
+        .bright-text { color: var(--white-glow); text-shadow: 0 0 10px rgba(255, 255, 255, 0.8); }
+        .label-text { color: var(--white-glow) !important; font-weight: 700; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.1em; }
+
+        .card-stat { background: var(--card-bg); border-top: 2px solid #1e293b; transition: all 0.3s; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+        
+        /* Efeito Glow Roxo Fluorescente */
+        #main-logo { transition: all 0.4s ease; color: var(--white-glow); }
+        #main-logo.active-glow { 
+            color: var(--neon-purple); 
+            text-shadow: 0 0 10px var(--neon-purple), 0 0 25px var(--neon-purple), 0 0 50px var(--neon-purple); 
+        }
+
+        .filter-btn { 
+            background: #1e293b; border: 2px solid var(--neon-blue); color: var(--white-glow); 
+            transition: 0.2s; font-size: 0.75rem; font-weight: 800; cursor: pointer; padding: 8px 16px; border-radius: 8px;
+        }
+        .filter-btn.active { background: var(--neon-blue); color: #020617; border-color: #fff; box-shadow: 0 0 20px var(--neon-blue); }
+        .btn-action { font-weight: 800; text-transform: uppercase; font-size: 0.7rem; cursor: pointer; }
+        
+        canvas { max-height: 250px !important; width: 100% !important; }
+        #dashboard-wrapper { padding: 20px; width: 100%; max-width: 1400px; margin: 0 auto; box-sizing: border-box; }
+
+        .rendering-pdf { width: 1200px !important; padding: 40px !important; }
+    </style>
+</head>
+<body class="p-4 md:p-6">
+
+    <div id="dashboard-wrapper">
+        <header class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+            <div id="main-logo" class="font-header text-4xl font-bold tracking-tighter">LOG<span class="opacity-90">CORE</span></div>
+            <div class="flex flex-wrap gap-3">
+                <button onclick="exportToPDF()" class="btn-action bg-emerald-600 px-5 py-2 rounded-lg hover:bg-emerald-500 shadow-lg shadow-emerald-900/20">📄 Download PDF</button>
+                <button onclick="toggleFullScreen()" class="btn-action bg-slate-700 px-5 py-2 rounded-lg">📺 Tela Cheia</button>
+                <button onclick="resetFilters()" class="btn-action border-2 border-purple-500 text-purple-500 px-5 py-2 rounded-lg hover:bg-purple-500 hover:text-white">🧹 Limpar Filtros</button>
+                <label class="btn-action bg-white text-black px-5 py-2 rounded-lg cursor-pointer">
+                    📂 Upload Excel
+                    <input type="file" id="fileUploader" class="hidden" accept=".xlsx, .xls">
+                </label>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <div class="card-stat p-6 rounded-2xl"><p class="label-text mb-1">Custo Total</p><h2 id="stat-custo" class="text-2xl font-header bright-text">R$ 0</h2></div>
+            <div class="card-stat p-6 rounded-2xl"><p class="label-text mb-1">Lucro Líquido</p><h2 id="stat-lucro" class="text-2xl font-header text-emerald-400">R$ 0</h2></div>
+            <div class="card-stat p-6 rounded-2xl"><p class="label-text mb-1">Valor da Carga</p><h2 id="stat-carga" class="text-2xl font-header text-sky-400">R$ 0</h2></div>
+            <div class="card-stat p-6 rounded-2xl"><p class="label-text mb-1">Peso da Carga (KG)</p><h2 id="stat-peso" class="text-2xl font-header text-purple-400">0 KG</h2></div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div class="bg-slate-900/60 p-5 rounded-2xl border border-slate-800">
+                <h4 class="label-text mb-4">Regiões</h4>
+                <div id="filter-region" class="flex flex-wrap gap-2"></div>
+            </div>
+            <div class="bg-slate-900/60 p-5 rounded-2xl border border-slate-800">
+                <h4 class="label-text mb-4">Status da Entrega</h4>
+                <div id="filter-status" class="flex flex-wrap gap-2"></div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div class="bg-[#0f172a] p-6 rounded-3xl border border-slate-800"><h4 class="label-text mb-6">Custos Operacionais</h4><canvas id="chartHorizontal"></canvas></div>
+            <div class="bg-[#0f172a] p-6 rounded-3xl border border-slate-800"><h4 class="label-text mb-6">Valor Carga por Região</h4><canvas id="chartVertical"></canvas></div>
+            <div class="bg-[#0f172a] p-6 rounded-3xl border border-slate-800"><h4 class="label-text mb-6">Comparativo de Gastos por Região</h4><canvas id="chartLine"></canvas></div>
+            <div class="bg-[#0f172a] p-6 rounded-3xl border border-slate-800"><h4 class="label-text mb-6">Status Entregas</h4><canvas id="chartDoughnut"></canvas></div>
+        </div>
+    </div>
+
+    <script>
+        let rawData = [];
+        let charts = {};
+        let activeFilters = { Regiões: [], 'Status da entrega': [] };
+        Chart.defaults.color = '#ffffff';
+
+        // Função para ascender o logo em roxo fluorescente
+        function triggerGlow() {
+            const logo = document.getElementById('main-logo');
+            logo.classList.add('active-glow');
+            setTimeout(() => {
+                logo.classList.remove('active-glow');
+            }, 600); // Fica aceso por 600ms
+        }
+
+        function initCharts() {
+            const common = { 
+                responsive: true, maintainAspectRatio: false, 
+                plugins: { legend: { display: false } }, 
+                scales: { y: { grid: { color: 'rgba(255,255,255,0.05)' } }, x: { grid: { color: 'rgba(255,255,255,0.05)' } } },
+                elements: { bar: { borderWidth: 2, borderColor: '#FFFFFF' } }
+            };
+            charts.horizontal = new Chart(document.getElementById('chartHorizontal'), { type: 'bar', data: { labels: [], datasets: [{ backgroundColor: '#38bdf8', data: [] }] }, options: { indexAxis: 'y', ...common } });
+            charts.vertical = new Chart(document.getElementById('chartVertical'), { type: 'bar', data: { labels: [], datasets: [{ backgroundColor: '#a855f7', data: [] }] }, options: common });
+            charts.line = new Chart(document.getElementById('chartLine'), { type: 'line', data: { labels: [], datasets: [{ borderColor: '#10b981', data: [], tension: 0.4, fill: true, backgroundColor: 'rgba(16, 185, 129, 0.1)' }] }, options: common });
+            charts.doughnut = new Chart(document.getElementById('chartDoughnut'), { type: 'doughnut', data: { labels: [], datasets: [{ data: [], backgroundColor: ['#38bdf8', '#a855f7', '#64748b', '#10b981'], borderWidth: 2, borderColor: '#0f172a' }] }, options: { maintainAspectRatio: false, plugins: { legend: { display: true, position: 'bottom', labels: { color: '#ffffff' } } } } });
+        }
+
+        function updateDashboard() {
+            let filtered = rawData;
+            if(activeFilters.Regiões.length) filtered = filtered.filter(d => activeFilters.Regiões.includes(d.Regiões));
+            if(activeFilters['Status da entrega'].length) filtered = filtered.filter(d => activeFilters['Status da entrega'].includes(d['Status da entrega']));
+
+            const sum = (key) => filtered.reduce((a, b) => {
+                let val = b[key];
+                if(typeof val === 'string') val = val.replace(/[R$\s.]/g, '').replace(',', '.');
+                return a + (parseFloat(val) || 0);
+            }, 0);
+            
+            const totalCusto = sum('Custos operacionais');
+            const totalLucro = sum('Lucro líquido');
+            const totalCarga = sum('Valor da carga');
+            const totalPeso = sum('Peso em KG');
+
+            document.getElementById('stat-custo').innerText = `R$ ${totalCusto.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+            document.getElementById('stat-lucro').innerText = `R$ ${totalLucro.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+            document.getElementById('stat-carga').innerText = `R$ ${totalCarga.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+            document.getElementById('stat-peso').innerText = `${totalPeso.toLocaleString('pt-BR')} KG`;
+
+            const regMap = {}; 
+            filtered.forEach(d => {
+                const reg = d.Regiões || 'N/A';
+                if(!regMap[reg]) regMap[reg] = { custo: 0, carga: 0 };
+                let cst = d['Custos operacionais'];
+                let crg = d['Valor da carga'];
+                if(typeof cst === 'string') cst = cst.replace(/[R$\s.]/g, '').replace(',', '.');
+                if(typeof crg === 'string') crg = crg.replace(/[R$\s.]/g, '').replace(',', '.');
+                regMap[reg].custo += parseFloat(cst) || 0;
+                regMap[reg].carga += parseFloat(crg) || 0;
+            });
+
+            const lbls = Object.keys(regMap);
+            charts.horizontal.data.labels = lbls;
+            charts.horizontal.data.datasets[0].data = lbls.map(l => regMap[l].custo);
+            charts.vertical.data.labels = lbls;
+            charts.vertical.data.datasets[0].data = lbls.map(l => regMap[l].carga);
+            charts.line.data.labels = lbls;
+            charts.line.data.datasets[0].data = lbls.map(l => regMap[l].custo);
+            const staMap = {}; 
+            filtered.forEach(d => {
+                const sta = d['Status da entrega'] || 'N/A';
+                staMap[sta] = (staMap[sta] || 0) + 1;
+            });
+            charts.doughnut.data.labels = Object.keys(staMap);
+            charts.doughnut.data.datasets[0].data = Object.values(staMap);
+            Object.values(charts).forEach(c => c.update());
+        }
+
+        function handleData(workbook) {
+            const sheet = workbook.Sheets[workbook.SheetNames[0]];
+            let data = XLSX.utils.sheet_to_json(sheet);
+            if (data.length > 0 && !data[0].hasOwnProperty('ID Pedido')) data = XLSX.utils.sheet_to_json(sheet, { range: 1 });
+            if (data.length > 0 && !data[0].hasOwnProperty('ID Pedido')) data = XLSX.utils.sheet_to_json(sheet, { range: 2 });
+            rawData = data.filter(d => d['ID Pedido']);
+            generateFilters();
+            updateDashboard();
+        }
+
+        function exportToPDF() {
+            triggerGlow();
+            const element = document.getElementById('dashboard-wrapper');
+            element.classList.add('rendering-pdf');
+            const opt = {
+                margin: 10, filename: 'LOGCORE_REPORT.pdf',
+                image: { type: 'jpeg', quality: 1.0 },
+                html2canvas: { scale: 2, useCORS: true, backgroundColor: '#020617' },
+                jsPDF: { unit: 'mm', format: 'a3', orientation: 'landscape' }
+            };
+            html2pdf().set(opt).from(element).save().then(() => element.classList.remove('rendering-pdf'));
+        }
+
+        function toggleFullScreen() {
+            triggerGlow();
+            if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+            else document.exitFullscreen();
+        }
+
+        function generateFilters() {
+            const createGroup = (id, key, filterKey) => {
+                const container = document.getElementById(id); container.innerHTML = '';
+                [...new Set(rawData.map(d => d[key]))].sort().filter(Boolean).forEach(val => {
+                    const btn = document.createElement('button');
+                    btn.className = 'filter-btn';
+                    btn.innerText = val;
+                    btn.onclick = () => {
+                        triggerGlow(); // Acende ao filtrar
+                        btn.classList.toggle('active');
+                        const idx = activeFilters[filterKey].indexOf(val);
+                        if(idx > -1) activeFilters[filterKey].splice(idx, 1);
+                        else activeFilters[filterKey].push(val);
+                        updateDashboard();
+                    };
+                    container.appendChild(btn);
+                });
+            };
+            createGroup('filter-region', 'Regiões', 'Regiões');
+            createGroup('filter-status', 'Status da entrega', 'Status da entrega');
+        }
+
+        function resetFilters() {
+            triggerGlow(); // Acende ao limpar
+            activeFilters = { Regiões: [], 'Status da entrega': [] };
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            updateDashboard();
+        }
+
+        document.getElementById('fileUploader').addEventListener('change', function(e) {
+            triggerGlow();
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                const workbook = XLSX.read(evt.target.result, { type: 'binary' });
+                handleData(workbook);
+            };
+            reader.readAsBinaryString(e.target.files[0]);
+        });
+
+        window.onload = () => {
+            initCharts();
+            fetch('Planilha-Controle-de-Logistica-e-Expedicao.xlsx')
+                .then(res => res.arrayBuffer())
+                .then(ab => {
+                    const workbook = XLSX.read(ab, { type: 'array' });
+                    handleData(workbook);
+                }).catch(() => {});
+        };
+    </script>
+</body>
+</html>
